@@ -7,7 +7,7 @@ class AddSensorScreen extends StatelessWidget {
   final String channelId;
   //final String apiUrl;
 
-  const AddSensorScreen({Key? key, required this.channelId}) : super(key: key);
+  const AddSensorScreen({super.key, required this.channelId});
 
   @override
   Widget build(BuildContext context) {

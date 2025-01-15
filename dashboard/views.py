@@ -489,7 +489,7 @@ def share_crop_table(request, channel_id, start_date, end_date, table_name):
     else:
         return JsonResponse({"error": "Error connecting to MongoDB"}, status=500)
 
-# To render dashboard data dynamically - DONE
+# To render dashboard data dynamically - DONE (New)
 def getDashboardData(request, channel_id):
     _id = ObjectId(channel_id)
     db, collection = connect_to_mongodb('Channel', 'dashboard')
@@ -513,12 +513,18 @@ def getDashboardData(request, channel_id):
             phosphorous_values = []
             timestamps_humid_temp = []
             timestamps_NPK = []
+            updated_sensor_array = []
             
             # Fetch data from sensor:DHT11
             db_humid_temp, collection_humid_temp = connect_to_mongodb('sensor', 'DHT11')
             if db_humid_temp is not None and collection_humid_temp is not None:
                 humid_temp_data = collection_humid_temp.find_one({"API_KEY": API_KEY})
                 if humid_temp_data:
+                    updated_sensor_array.append({
+                        "sensor_id": str(humid_temp_data.get('_id')), 
+                        "sensor_type": "DHT11", 
+                        "sensor_data_count": len(humid_temp_data.get('sensor_data', []))
+                    })
                     for data_point in humid_temp_data.get('sensor_data', []):
                         humidity_value = data_point.get('humidity_value', '')
                         temperature_value = data_point.get('temperature_value', '')
@@ -534,6 +540,11 @@ def getDashboardData(request, channel_id):
             if db_NPK is not None and collection_NPK is not None:
                 NPK_data = collection_NPK.find_one({"API_KEY": API_KEY})
                 if NPK_data:
+                    updated_sensor_array.append({
+                        "sensor_id": str(NPK_data.get('_id')), 
+                        "sensor_type": "NPK", 
+                        "sensor_data_count": len(NPK_data.get('sensor_data', []))
+                    })
                     for data_point in NPK_data.get('sensor_data', []):
                         nitrogen_value = data_point.get('nitrogen_value', '')
                         phosphorous_value = data_point.get('phosphorous_value', '')
@@ -551,6 +562,11 @@ def getDashboardData(request, channel_id):
             if db_ph is not None and collection_ph is not None:
                 ph_data = collection_ph.find_one({"API_KEY": API_KEY})
                 if ph_data:
+                    updated_sensor_array.append({
+                        "sensor_id": str(ph_data.get('_id')), 
+                        "sensor_type": "PHSensor", 
+                        "sensor_data_count": len(ph_data.get('sensor_data', []))
+                    })
                     for data_point in ph_data.get('sensor_data', []):
                         ph_values.append(data_point.get('ph_value', ''))
                         timestamp_obj = data_point.get('timestamp', datetime.utcnow())
@@ -561,25 +577,36 @@ def getDashboardData(request, channel_id):
             if db_rainfall is not None and collection_rainfall is not None:
                 rainfall_data = collection_rainfall.find_one({"API_KEY": API_KEY})
                 if rainfall_data:
+                    updated_sensor_array.append({
+                        "sensor_id": str(rainfall_data.get('_id')), 
+                        "sensor_type": "DHT11", 
+                        "sensor_data_count": len(rainfall_data.get('sensor_data', []))
+                    })
                     for data_point in rainfall_data.get('sensor_data', []):
                         rainfall_values.append(data_point.get('rainfall_value', ''))
                         timestamp_obj = data_point.get('timestamp', datetime.utcnow())
                         formatted_timestamp = timestamp_obj.astimezone(pytz.utc).strftime('%d-%m-%Y')
                         rainfall_timestamps.append(formatted_timestamp)
             
+            # Update the sensor array in the channel document
+            collection.update_one(
+                {"_id": _id},
+                {"$set": {"sensor": updated_sensor_array}}
+            )
+
             context = {
                 "channel_id": channel_id,
                 "ph_values": ph_values,
+                "timestamps": timestamps,  # Ensure alignment
                 "rainfall_values": rainfall_values,
-                "timestamps": timestamps,
+                "rainfall_timestamps": rainfall_timestamps,  # Ensure alignment
                 "humid_values": humid_values,
                 "temp_values": temp_values,
-                "timestamps_humid_temp": timestamps_humid_temp,
-                "timestamps_NPK":timestamps_NPK,
-                "rainfall_timestamps":rainfall_timestamps,
-                "nitrogen_values":nitrogen_values,
-                "phosphorous_values":phosphorous_values,
-                "potassium_values":potassium_values,
+                "timestamps_humid_temp": timestamps_humid_temp,  # Ensure alignment
+                "nitrogen_values": nitrogen_values,
+                "phosphorous_values": phosphorous_values,
+                "potassium_values": potassium_values,
+                "timestamps_NPK": timestamps_NPK,  # Ensure alignment
                 "API": API_KEY,
             }
             if humid_values or ph_values or rainfall_values or nitrogen_values or potassium_values or phosphorous_value or temp_values:
@@ -730,23 +757,60 @@ def getSharedDashboardDetail(request,channel_id):
     else:
         print("Error connecting to MongoDB.")
 
-# ADD SENSOR - DONE
+# ADD SENSOR TO CHANNEL - (New)
 @csrf_exempt
 def add_sensor(request, channel_id):
     if request.method == 'POST':
-        channel_id = channel_id
         API_KEY = request.POST.get('apiKey')
         db_channel, collection_channel = connect_to_mongodb('Channel', 'dashboard')
-        _id=ObjectId(channel_id)
+        _id = ObjectId(channel_id)
         filter_criteria = {'_id': _id}
-        update_result = collection_channel.update_one(filter_criteria, {'$set': {'API_KEY': API_KEY}})
-        update_result2 = collection_channel.update_one(filter_criteria, {'$set': {'allow_API': "permit"}})
-        if update_result.modified_count >0:
-            print("success add sensor")
+
+        sensors = [
+            {"name": "DHT11", "db_name": "DHT11"},
+            {"name": "NPK", "db_name": "NPK"},
+            {"name": "PHSensor", "db_name": "PHSensor"},
+            {"name": "Rainfall", "db_name": "rainfall"}
+        ]
+
+        matching_sensors = []
+
+        # Fetch data from each sensor collection
+        for sensor in sensors:
+            sensor_db, sensor_collection = connect_to_mongodb('sensor', sensor['db_name'])
+            if sensor_db is not None and sensor_collection is not None:
+                # Fetch sensors matching the provided API_KEY
+                sensor_data = sensor_collection.find({'API_KEY': API_KEY})
+                for data in sensor_data:
+                    matching_sensors.append({
+                        'sensor_id': str(data.get('_id')),
+                        'sensor_type': data.get('sensor_type', 'Unknown Type'),
+                        'sensor_data_count': len(data.get('sensor_data', [])),
+                    })
+
+        # Update the channel document with the matching sensors
+        if matching_sensors:
+            # Use $set to overwrite the 'sensor' array with the new matching sensors
+            collection_channel.update_one(
+                filter_criteria,
+                {
+                    '$set': {
+                        'API_KEY': API_KEY,
+                        'allow_API': "permit",
+                        'sensor': matching_sensors  # Overwrite the sensor array
+                    }
+                }
+            )
+            print(f"Successfully updated sensors for channel {channel_id}.")
             return redirect('view_channel_sensor', channel_id=channel_id)
         else:
-            print("fail add sensor")
+            print(f"No sensors found with API_KEY: {API_KEY}")
+            return render(request, 'add_sensor.html', {
+                'channel_id': channel_id,
+                'error': 'No sensors found with the provided API_KEY.'
+            })
     else:
+        # Handle GET request to render the form
         _id = ObjectId(channel_id)
         db, collection = connect_to_mongodb('Channel', 'dashboard')
 
@@ -755,14 +819,13 @@ def add_sensor(request, channel_id):
             if channel:
                 print("Found channel")
                 sensor_api = channel.get('API_KEY', '')
-                if sensor_api:
-                    context = {"channel_id": channel_id,"API_KEY":sensor_api}
-                    return render(request, 'add_sensor.html', context)
-                else:
-                    context = {"channel_id": channel_id}
-                    return render(request, 'add_sensor.html', context)
+                context = {"channel_id": channel_id, "API_KEY": sensor_api}
+                return render(request, 'add_sensor.html', context)
+            else:
+                context = {"channel_id": channel_id}
+                return render(request, 'add_sensor.html', context)
 
-# MANAGE SENSOR BASED ON API KEY - DONE
+# MANAGE SENSOR BASED ON API KEY - DONE (New)
 def manage_sensor(request, channel_id):
     _id = ObjectId(channel_id)
     db, collection = connect_to_mongodb('Channel', 'dashboard')
@@ -805,49 +868,65 @@ def manage_sensor(request, channel_id):
 
     return JsonResponse({"error": "Channel not found"}, status=404)
 
-#   DELETE SENSOR - DONE
+# UNSET SENSOR - Clears the API key from the channel directly (New)
+@csrf_exempt
+def unset_sensor(request, channel_id):
+    _id = ObjectId(channel_id)
+    db, collection = connect_to_mongodb('Channel', 'dashboard')
+    
+    if db is not None and collection is not None:
+        channel = collection.find_one({'_id': _id})
+        if channel:
+            # Directly unset the API_KEY without any checks
+            collection.update_one(
+                {'_id': _id},
+                {'$set': 
+                    {'API_KEY': '', 'sensor': []}
+                }
+            )
+            return JsonResponse({"success": True, "message": "API_KEY unset successfully."})
+        else:
+            return JsonResponse({"success": False, "error": "Channel document not found."}, status=404)
+    else:
+        return JsonResponse({"error": "Database connection error"}, status=500)
+
+#   DELETE SENSOR - DONE (New)
 @csrf_exempt
 def delete_sensor(request, channel_id, sensor_type):
     _id = ObjectId(channel_id)
     db, collection = connect_to_mongodb('Channel', 'dashboard')
     print(sensor_type)
+
     if db is not None and collection is not None:
         channel = collection.find_one({'_id': _id})
         if channel:
             api_key = channel.get('API_KEY', '')
             if api_key:
-                if sensor_type == "DHT11":
-                    dht_db, dht_collection = connect_to_mongodb('sensor', 'DHT11')
-                    delete_action = dht_collection.find_one({"API_KEY": api_key})
+                # Determine the sensor collection to delete from
+                sensor_collections = {
+                    "DHT11": ('sensor', 'DHT11'),
+                    "NPK": ('sensor', 'NPK'),
+                    "ph_sensor": ('sensor', 'PHSensor'),
+                    "rainfall": ('sensor', 'rainfall')
+                }
+                if sensor_type in sensor_collections:
+                    sensor_db_name, sensor_collection_name = sensor_collections[sensor_type]
+                    sensor_db, sensor_collection = connect_to_mongodb(sensor_db_name, sensor_collection_name)
+                    
+                    delete_action = sensor_collection.find_one({"API_KEY": api_key})
                     if delete_action:
-                        dht_collection.delete_one({"API_KEY": api_key})
+                        # Delete the specific sensor data
+                        sensor_collection.delete_one({"API_KEY": api_key})
+                        
+                        # Update the channel's sensor array to remove the deleted sensor
+                        collection.update_one(
+                            {'_id': _id},
+                            {'$pull': {'sensor': {'sensor_type': sensor_type}}}
+                        )
+                        
                         return redirect('view_channel_sensor', channel_id=channel_id)
                     else:
-                        return JsonResponse({"success": False, "error": "DHT11 sensor document not found."}, status=404)
-                elif sensor_type == "NPK":
-                    NPK_db, NPK_collection = connect_to_mongodb('sensor', 'NPK')
-                    delete_action = NPK_collection.find_one({"API_KEY": api_key})
-                    if delete_action:
-                        NPK_collection.delete_one({"API_KEY": api_key})
-                        return redirect('view_channel_sensor', channel_id=channel_id)
-                    else:
-                        return JsonResponse({"success": False, "error": "NPKSensor document not found."}, status=404)
-                elif sensor_type == "ph_sensor":
-                    ph_db, ph_collection = connect_to_mongodb('sensor', 'PHSensor')
-                    delete_action = ph_collection.find_one({"API_KEY": api_key})
-                    if delete_action:
-                        ph_collection.delete_one({"API_KEY": api_key})
-                        return redirect('view_channel_sensor', channel_id=channel_id)
-                    else:
-                        return JsonResponse({"success": False, "error": "PHSensor document not found."}, status=404)
-                elif sensor_type == "rainfall":
-                    rainfall_db, rainfall_collection = connect_to_mongodb('sensor', 'rainfall')
-                    delete_action = rainfall_collection.find_one({"API_KEY": api_key})
-                    if delete_action:
-                        rainfall_collection.delete_one({"API_KEY": api_key})
-                        return redirect('view_channel_sensor', channel_id=channel_id)
-                    else:
-                        return JsonResponse({"success": False, "error": "rainfall document not found."}, status=404)
+                        return JsonResponse({"success": False, "error": f"{sensor_type} sensor document not found."}, status=404)
                 else:
                     return JsonResponse({"success": False, "error": "Invalid sensor type."}, status=400)
             else:

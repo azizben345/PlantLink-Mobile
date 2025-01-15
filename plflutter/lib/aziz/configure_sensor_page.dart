@@ -6,7 +6,7 @@ import 'package:plflutter/aziz/dashboard_page.dart';
 class ConfigureSensorPage extends StatefulWidget {
   final String channelId;
 
-  const ConfigureSensorPage({Key? key, required this.channelId}) : super(key: key);
+  const ConfigureSensorPage({super.key, required this.channelId});
 
   @override
   State<ConfigureSensorPage> createState() => _ConfigureSensorPageState();
@@ -103,6 +103,7 @@ class _ConfigureSensorPageState extends State<ConfigureSensorPage> {
                     channelId: widget.channelId,
                     sensorType: sensorType,
                   );
+                  if (!mounted) return;
                   setState(() {
                     _sensorData = SensorService().fetchSensors(widget.channelId);
                   });
@@ -118,6 +119,7 @@ class _ConfigureSensorPageState extends State<ConfigureSensorPage> {
                     const SnackBar(content: Text('Sensor deleted successfully')),
                   );
                 } catch (e) {
+                  if (!mounted) return;
                   print('Error deleting sensor: $e');
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Failed to delete sensor')),
@@ -164,6 +166,38 @@ class _ConfigureSensorPageState extends State<ConfigureSensorPage> {
                 ),
                 const Divider(),
 
+                // Unset Sensor Button
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      try {
+                        await SensorService().unsetSensor(widget.channelId);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Sensor unset successfully')),
+                        );
+                        // Navigate to DashboardScreen
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => DashboardScreen(channelId: widget.channelId),
+                          ),
+                        );
+                      } catch (e) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Failed to unset sensor: $e')),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.warning, color: Colors.white),
+                    label: const Text('Unset Sensor'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                    ),
+                  ),
+                ),
+                const Divider(),
+
                 // Display Sensor List
                 Expanded(
                   child: ListView.builder(
@@ -173,9 +207,11 @@ class _ConfigureSensorPageState extends State<ConfigureSensorPage> {
                       return Card(
                         margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                         child: ListTile(
-                          title: Text( (sensor['sensor_name'] != null)
-                              ? sensor['sensor_name']
-                              : 'Unnamed Sensor'),
+                          title: Text(
+                            (sensor['sensor_name'] != null)
+                                ? sensor['sensor_name']
+                                : 'Unnamed Sensor',
+                          ),
                           subtitle: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -198,8 +234,8 @@ class _ConfigureSensorPageState extends State<ConfigureSensorPage> {
                               IconButton(
                                 icon: const Icon(Icons.delete, color: Colors.red),
                                 onPressed: () => _deleteSensor(
-                                  sensor['sensor_id'], 
-                                  sensor['sensor_type']
+                                  sensor['sensor_id'],
+                                  sensor['sensor_type'],
                                 ),
                               ),
                             ],

@@ -3,6 +3,7 @@ import 'package:plflutter/deletechannel.dart';
 import 'package:plflutter/editchannel_page.dart';
 import 'package:plflutter/aziz/dashboard_page.dart';
 import 'fetch_channel.dart';
+import 'package:plflutter/aziz/manage_sensors.dart';
 // import 'dart:convert';
 // import 'package:http/http.dart' as http;
 
@@ -41,7 +42,12 @@ class ViewChannel extends StatelessWidget {
                     backgroundColor: Colors.blue[200],
                   ),
                   onPressed: () {
-                    Navigator.pushNamed(context, '');
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ManageSensorsPage(),
+                      ),
+                    );
                   },
                   child: const Text('Manage Sensors'),
                 ),

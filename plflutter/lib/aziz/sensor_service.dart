@@ -60,4 +60,19 @@ class SensorService {
     }
   }
 
+ // Unset a sensor
+  Future<void> unsetSensor(String channelId) async {
+    final url = Uri.parse('$baseUrl/mychannel/$channelId/unset_sensor');
+
+    try {
+      final response = await http.post(url);
+
+      if (response.statusCode != 200) {
+        throw Exception('Failed to unset sensor. Status code: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Error unsetting sensor: $e');
+    }
+  }
+
 }

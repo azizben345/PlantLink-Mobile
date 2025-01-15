@@ -130,7 +130,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return WillPopScope(
       onWillPop: _onWillPop,
       child: Scaffold(
-        appBar: AppBar(title: const Text("Dashboard")),
+        appBar: AppBar(
+          title: const Text("Dashboard"),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: fetchSensorData, // Refresh page button
+            ),
+          ],
+        ),
         body: isLoading
             ? const Center(child: CircularProgressIndicator())
             : SingleChildScrollView(
